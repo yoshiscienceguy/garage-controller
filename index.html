@@ -13,43 +13,55 @@
       padding: 24px;
     }
 
-    h1 {
-      margin-bottom: 8px;
-    }
-
     .card {
       max-width: 420px;
       margin: 0 auto;
       background: white;
       border-radius: 16px;
-      padding: 20px;
+      padding: 22px;
       box-shadow: 0 4px 14px rgba(0,0,0,0.12);
     }
 
-    input {
-      width: 90%;
-      padding: 14px;
-      margin: 8px 0;
-      font-size: 16px;
-      border-radius: 8px;
-      border: 1px solid #ccc;
+    h1 {
+      margin-bottom: 6px;
+      font-size: 28px;
+    }
+
+    p {
+      color: #444;
+      margin-top: 4px;
+    }
+
+    .host {
+      background: #f1f1f1;
+      padding: 10px;
+      border-radius: 10px;
+      font-size: 14px;
+      margin: 12px 0 20px;
+      color: #333;
     }
 
     button {
       display: block;
       width: 90%;
       margin: 18px auto;
-      padding: 28px;
+      padding: 26px;
       font-size: 26px;
       border: none;
       border-radius: 14px;
       color: white;
       user-select: none;
-      touch-action: none;
+      touch-action: manipulation;
     }
 
     .open {
       background: #2e7d32;
+    }
+
+    .stop {
+      background: #ef6c00;
+      font-size: 30px;
+      padding: 32px;
     }
 
     .close {
@@ -68,13 +80,18 @@
     }
 
     #status {
-      margin-top: 15px;
+      margin-top: 16px;
       white-space: pre-wrap;
       font-size: 14px;
       color: #333;
+      background: #f1f1f1;
+      padding: 12px;
+      border-radius: 10px;
+      min-height: 40px;
+      text-align: left;
     }
 
-    .warning {
+    .small {
       font-size: 13px;
       color: #666;
       margin-top: 14px;
@@ -85,73 +102,44 @@
 <body>
   <div class="card">
     <h1>Garage Controller</h1>
-    <p>Press and hold. Release to stop.</p>
+    <p>Tap once. Use STOP to stop movement.</p>
 
-    <input id="deviceIp" placeholder="D1 Mini IP, example: 192.168.1.85" value="192.168.0.158">
-    <input id="apiKey" placeholder="API key" type="password" value="CHANGE_THIS_KEY">
+    <div class="host">
+      Sending to: <strong>http://garage.local</strong>
+    </div>
 
-    <button class="open"
-      onpointerdown="startHold('open')"
-      onpointerup="releaseHold()"
-      onpointercancel="releaseHold()"
-      onpointerleave="releaseHold()">
-      HOLD OPEN
+    <button class="open" onclick="sendCommand('/open')">
+      OPEN / UP
     </button>
 
-    <button class="close"
-      onpointerdown="startHold('close')"
-      onpointerup="releaseHold()"
-      onpointercancel="releaseHold()"
-      onpointerleave="releaseHold()">
-      HOLD CLOSE
+    <button class="stop" onclick="sendCommand('/stop')">
+      STOP
     </button>
 
-    <button class="statusButton" onclick="getStatus()">
+    <button class="close" onclick="sendCommand('/close')">
+      CLOSE / DOWN
+    </button>
+
+    <button class="statusButton" onclick="sendCommand('/status')">
       Check Status
     </button>
 
     <div id="status">Ready</div>
 
-    <div class="warning">
-      If this page is hosted on HTTPS, your browser may block requests to the ESP8266's HTTP address.
+    <div class="small">
+      Testing mode only. Make sure your phone/laptop is on the same Wi-Fi as the D1 Mini.
     </div>
   </div>
 
   <script>
-    let holding = false;
-
-    const savedIp = localStorage.getItem("garageIp");
-    const savedKey = localStorage.getItem("garageKey");
-
-    if (savedIp) {
-      document.getElementById("deviceIp").value = savedIp;
-    }
-
-    if (savedKey) {
-      document.getElementById("apiKey").value = savedKey;
-    }
-
-    function saveSettings() {
-      const ip = document.getElementById("deviceIp").value.trim();
-      const key = document.getElementById("apiKey").value.trim();
-
-      localStorage.setItem("garageIp", ip);
-      localStorage.setItem("garageKey", key);
-    }
-
-    function getBaseUrl() {
-      const ip = document.getElementById("deviceIp").value.trim();
-      return "http://" + ip;
-    }
-
-    function getKey() {
-      return encodeURIComponent(document.getElementById("apiKey").value.trim());
-    }
+    const DEVICE_HOST = "http://garage.local";
+    const API_KEY = "CHANGE_THIS_KEY";
 
     async function sendCommand(path) {
-      saveSettings();
+      const url = DEVICE_HOST + path + "?key=" + encodeURIComponent(API_KEY);
 
-      const url = getBaseUrl() + path + "?key=" + getKey();
+      document.getElementById("status").innerText =
+        "Sending command:\n" + url;
 
       try {
         const response = await fetch(url, {
@@ -162,49 +150,30 @@
         const text = await response.text();
 
         if (!response.ok) {
-          document.getElementById("status").innerText = "Error:\n" + text;
+          document.getElementById("status").innerText =
+            "Error:\n" + text;
           return;
         }
 
-        document.getElementById("status").innerText = text;
+        try {
+          const data = JSON.parse(text);
+          document.getElementById("status").innerText =
+            JSON.stringify(data, null, 2);
+        } catch {
+          document.getElementById("status").innerText = text;
+        }
+
       } catch (err) {
         document.getElementById("status").innerText =
           "Connection error.\n\n" +
           "Possible causes:\n" +
-          "- Wrong IP address\n" +
-          "- D1 Mini not connected\n" +
-          "- Browser blocked HTTPS-to-HTTP mixed content\n\n" +
+          "- garage.local is not resolving\n" +
+          "- D1 Mini is offline\n" +
+          "- Phone/laptop is not on the same Wi-Fi\n" +
+          "- Browser blocked HTTPS-to-HTTP request if using GitHub Pages\n\n" +
           err;
       }
     }
-
-    function startHold(direction) {
-      if (holding) return;
-
-      holding = true;
-      document.getElementById("status").innerText = "Holding " + direction.toUpperCase();
-
-      if (direction === "open") {
-        sendCommand("/hold/open");
-      } else if (direction === "close") {
-        sendCommand("/hold/close");
-      }
-    }
-
-    function releaseHold() {
-      if (!holding) return;
-
-      holding = false;
-      document.getElementById("status").innerText = "Released";
-      sendCommand("/release");
-    }
-
-    function getStatus() {
-      sendCommand("/status");
-    }
-
-    window.addEventListener("blur", releaseHold);
-    window.addEventListener("beforeunload", releaseHold);
   </script>
 </body>
 </html>
