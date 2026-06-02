@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Garage Controller</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background: #f5f5f5;
+      margin: 0;
+      padding: 24px;
+    }
+
+    h1 {
+      margin-bottom: 8px;
+    }
+
+    .card {
+      max-width: 420px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+    }
+
+    input {
+      width: 90%;
+      padding: 14px;
+      margin: 8px 0;
+      font-size: 16px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+    }
+
+    button {
+      display: block;
+      width: 90%;
+      margin: 18px auto;
+      padding: 28px;
+      font-size: 26px;
+      border: none;
+      border-radius: 14px;
+      color: white;
+      user-select: none;
+      touch-action: none;
+    }
+
+    .open {
+      background: #2e7d32;
+    }
+
+    .close {
+      background: #c62828;
+    }
+
+    .statusButton {
+      background: #1565c0;
+      font-size: 18px;
+      padding: 16px;
+    }
+
+    button:active {
+      transform: scale(0.97);
+      opacity: 0.85;
+    }
+
+    #status {
+      margin-top: 15px;
+      white-space: pre-wrap;
+      font-size: 14px;
+      color: #333;
+    }
+
+    .warning {
+      font-size: 13px;
+      color: #666;
+      margin-top: 14px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+    <h1>Garage Controller</h1>
+    <p>Press and hold. Release to stop.</p>
+
+    <input id="deviceIp" placeholder="D1 Mini IP, example: 192.168.1.85">
+    <input id="apiKey" placeholder="API key" type="password">
+
+    <button class="open"
+      onpointerdown="startHold('open')"
+      onpointerup="releaseHold()"
+      onpointercancel="releaseHold()"
+      onpointerleave="releaseHold()">
+      HOLD OPEN
+    </button>
+
+    <button class="close"
+      onpointerdown="startHold('close')"
+      onpointerup="releaseHold()"
+      onpointercancel="releaseHold()"
+      onpointerleave="releaseHold()">
+      HOLD CLOSE
+    </button>
+
+    <button class="statusButton" onclick="getStatus()">
+      Check Status
+    </button>
+
+    <div id="status">Ready</div>
+
+    <div class="warning">
+      If this page is hosted on HTTPS, your browser may block requests to the ESP8266's HTTP address.
+    </div>
+  </div>
+
+  <script>
+    let holding = false;
+
+    const savedIp = localStorage.getItem("garageIp");
+    const savedKey = localStorage.getItem("garageKey");
+
+    if (savedIp) {
+      document.getElementById("deviceIp").value = savedIp;
+    }
+
+    if (savedKey) {
+      document.getElementById("apiKey").value = savedKey;
+    }
+
+    function saveSettings() {
+      const ip = document.getElementById("deviceIp").value.trim();
+      const key = document.getElementById("apiKey").value.trim();
+
+      localStorage.setItem("garageIp", ip);
+      localStorage.setItem("garageKey", key);
+    }
+
+    function getBaseUrl() {
+      const ip = document.getElementById("deviceIp").value.trim();
+      return "http://" + ip;
+    }
+
+    function getKey() {
+      return encodeURIComponent(document.getElementById("apiKey").value.trim());
+    }
+
+    async function sendCommand(path) {
+      saveSettings();
+
+      const url = getBaseUrl() + path + "?key=" + getKey();
+
+      try {
+        const response = await fetch(url, {
+          method: "GET",
+          mode: "cors"
+        });
+
+        const text = await response.text();
+
+        if (!response.ok) {
+          document.getElementById("status").innerText = "Error:\n" + text;
+          return;
+        }
+
+        document.getElementById("status").innerText = text;
+      } catch (err) {
+        document.getElementById("status").innerText =
+          "Connection error.\n\n" +
+          "Possible causes:\n" +
+          "- Wrong IP address\n" +
+          "- D1 Mini not connected\n" +
+          "- Browser blocked HTTPS-to-HTTP mixed content\n\n" +
+          err;
+      }
+    }
+
+    function startHold(direction) {
+      if (holding) return;
+
+      holding = true;
+      document.getElementById("status").innerText = "Holding " + direction.toUpperCase();
+
+      if (direction === "open") {
+        sendCommand("/hold/open");
+      } else if (direction === "close") {
+        sendCommand("/hold/close");
+      }
+    }
+
+    function releaseHold() {
+      if (!holding) return;
+
+      holding = false;
+      document.getElementById("status").innerText = "Released";
+      sendCommand("/release");
+    }
+
+    function getStatus() {
+      sendCommand("/status");
+    }
+
+    window.addEventListener("blur", releaseHold);
+    window.addEventListener("beforeunload", releaseHold);
+  </script>
+</body>
+</html>
